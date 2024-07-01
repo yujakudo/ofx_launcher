@@ -19,7 +19,7 @@ function getEnv($path="") {
         $path = $script:PSScriptRoot
     }
     $drv = $path.Substring(0, 2)
-    if($path.Contains("subsystem")) {
+    if($path.Contains("src")) {
         return "debug"
     } elseif( $drv -eq "\\" ) {
         return "online"
@@ -67,7 +67,7 @@ function makePathDict($obj, $drive_letter="") {
         $drive_letter = $script:PSScriptRoot.Substring(0, 2)
     }
     #   辞書の変数。初期メンバーはドライブレター部
-    $dict = @{"Drive" = $drive_letter}
+    $dict = @{"Drive" = $drive_letter; "AppDir" = $script:PSScriptRoot}
     #   特殊フォルダ
     foreach($key in "Desktop","MyDocuments","StartMenu","Templates") {
         $dict.Add($key, [System.Environment]::GetFolderPath($key))
@@ -109,11 +109,11 @@ function convertVars($data, $dict, $add_base=$false) {
 <#  インストールのソースにする環境の優先順位
     若い方が優先順位が高い   #>
 function envPriority($env) {
-    $ary = @("debug", "online", "mobile", "USB")
+    $ary = @("debug", "online", "mobile", "USB", "none")
     return [Array]::IndexOf($ary, $env)
 }
 
-<#  インストール可能か？    #>
+<#  インストール／アップデート可能か？    #>
 function canInstall($drv_inf) {
     $src_env = getSourceEnv
     return ((envPriority $drv_inf["env"]) -gt (envPriority $src_env))
@@ -155,10 +155,11 @@ function getDriveInfo($drive) {
 }
 
 <#  ドライブの検出し、対象のドライブ全てに付いて情報を取得する  #>
-function getDrives {
+function getDrives($only_usb=$false) {
     # Cドライブの情報。初期メンバーは、PCのドライブ（C:、mobile）
-    $drives = @{
-        "C:" = getDriveInfo "C:"
+    $drives = @{}
+    if($only_usb) {
+        $drives.Add("C:", (getDriveInfo "C:"))
     }
     # USB（リムーバブルメディア）のドライブを取得
     $usbs = (Get-WmiObject CIM_LogicalDisk | Where-Object DriveType -eq 2).DeviceID

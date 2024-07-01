@@ -1,2 +1,5 @@
 .git/
+.vscode/
 resources/
+demo/
+src/ofx_book_config.json

@@ -212,29 +212,37 @@ function HashDsp($hash) {
          | Out-String).trim() | Write-Host
 }
 
-Write-Host "ドライブを検出しています…"
-$drives = getDrives
-HashDsp $drives
-
-$SRC_ENV = getSourceEnv
-
-# アップデート。起動ごとに必ず行う
-foreach($drv in $drives.Keys) {
-    # ドライブに既にインストールされていて、アップデート可能なら、アップデート（確認）
-    if($drives[$drv]["exists"] -and $drives[$drv]["can-install"]) {
-        install $drives[$drv] $SRC_ENV
+<#  アップデートの処理  #>
+updateProc($arg) {
+    Write-Host "ドライブを検出しています…"
+    $sec_env = getSourceEnv
+    $drives = getDrives $arg["media-only"]
+    $cnt = 0
+    HashDsp $drives
+        foreach($drv in $drives.Keys) {
+        # ドライブに既にインストールされていて、アップデート可能なら、アップデート（確認）
+        if($drives[$drv]["exists"] -and $drives[$drv]["can-install"]) {
+            install $drives[$drv] $sec_env
+            $cnt++
+        }
+    }
+    if($cnt -eq 0) {
+        Write-Host "アップデート可能なドライブはありません。"
     }
 }
 
-# インストール/アンインストール
-if($Args[0] -eq "-F") {
+<#  インストール処理    #>
+function installProc($arg) {
+    $sec_env = getSourceEnv
     while($true) {
+        $drives = getDrives $arg["media-only"]
+        HashDsp $drives
         $prc = Read-Host "処理を選択してください。（I:インストール／U:アプリを削除／その他：終了）"
         $prc = $prc.ToLower()
         if($prc -eq "i") {
             $drv_letter = askDrive $drives $true
             if($drv_letter -ne "") {
-                install $drives[$drv_letter] $SRC_ENV
+                install $drives[$drv_letter] $sec_env
             }
         } elseif ( $prc -eq "u") {
             $drv_letter = askDrive $drives $false
@@ -242,9 +250,39 @@ if($Args[0] -eq "-F") {
                 uninstall $drives[$drv_letter]
             }
         } else {
-                exit
+            break
         }
-        $drives = getDrives
-        HashDsp $drives
     }
+}
+
+# 引数のデフォルト。無指定の場合はアップデートのみ
+$arg = @{
+    "update" = $true
+    "istall" = $false
+    "media-only" = $false
+}
+# もし引数があったら、アップデートもしない
+if($Args.length -gt 0) {
+    $arg["update"] = $false
+}
+
+# オプションの解析
+for($i=0; $i -lt $Args.length; $i++) {
+    $opt = $Arg[$i].Replace("-","")
+    switch($opt) {
+        "full" {   $arg["update"] = $true; $arg["istall"] = $true;    }
+        "update" {   $arg["update"] = $true;     }
+        "install" {   $arg["install"] = $true;     }
+        "mediaonly" {   $arg["media-only"] = $true;     }
+    }
+}
+
+# アップデート
+if($arg["update"]) {
+    updateProc $arg
+}
+
+# インストール/アンインストール
+if($arg["install"]) {
+    installProc $arg
 }

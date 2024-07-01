@@ -63,6 +63,7 @@ function init {
     }
     #   環境変数の設定
     [Environment]::SetEnvironmentVariable($ENVVAR_NAME, $BOOK_CONF_PATH, 'User')    
+    Hide-ConsoleWindow
 }
 
 <#  終了処理
@@ -72,9 +73,14 @@ function exitProc {
     [Environment]::SetEnvironmentVariable($ENVVAR_NAME, "", 'User')    
 }
 
+# $FONT_FAMILY = "游ゴシック Medium"
+# $FONT_FAMILY = "MSPゴシック"
+$FONT_FAMILY = "メイリオ"
+$FONT_SIZE = 11
+
 <#  フォームのための定数    #>
 $MARGIN_W = 20;   $PAD_COL = 16;   $COL_W = 120;
-$MARGIN_H = 10;   $PAD_ROW = 12;   $ROW_H = 54;
+$MARGIN_H = 10;   $PAD_ROW = 12;   $ROW_H = 50;
 
 <#  描画位置の計算  #>
 function getX($idx) {
@@ -99,7 +105,7 @@ function newButton($x, $y, $width, $height, $text) {
     $btn = New-Object System.Windows.Forms.Button
     $btn.Location = "${x},${y}"
     $btn.Size = New-Object System.Drawing.Size($width, $height)
-    $btn.Font = New-Object System.Drawing.Font("游ゴシック Medium", 12)
+    $btn.Font = New-Object System.Drawing.Font($FONT_FAMILY, $FONT_SIZE)
     $btn.Text = $text
     return $btn
 }
@@ -108,10 +114,21 @@ function newLabel($x, $y, $width, $height, $text) {
     $lbl = New-Object System.Windows.Forms.Label
     $lbl.Location = "${x},${y}"
     $lbl.Size = New-Object System.Drawing.Size($width, $height)
-    $lbl.Font = New-Object System.Drawing.Font("游ゴシック Medium", 12)
+    $lbl.Font = New-Object System.Drawing.Font($FONT_FAMILY, $FONT_SIZE)
     $lbl.BackColor = "#F8F8F8"
     $lbl.Text = $text
     return $lbl
+}
+
+function switchLabel($lbl, $value) {
+    if($value) {
+        $lbl.Text = $lbl.Text.Replace("◎", "?")
+        $lbl.forecolor = "#FF8080"
+    } else {
+        $lbl.Text = $lbl.Text.Replace("?", "◎")
+        $lbl.forecolor = "#808080"
+    }
+
 }
 
 <#  フォーム
@@ -150,30 +167,32 @@ function makeForm {
     })
     # ラベル
     $lblOnline = newLabel `
-        (getX 0) (getY 2) (getWidth 1) (getHeight 0.5) "Offline"
-    $label.forecolor = "#080808"
+        (getX 0) (getY 2) (getWidth 1) (getHeight 0.5) "◎ Net drive"
+    switchLabel $lblOnline $false
     $lblUSB = newLabel `
-        (getX 1) (getY 2) (getWidth 1) (getHeight 0.5) "USB None"
-    $lblUSB.forecolor = "#080808"
+        (getX 1) (getY 2) (getWidth 1) (getHeight 0.5) "◎ USB drive"
+    switchLabel $lblUSB $false
         # 新規作成ボタン
     $btnNew = newButton `
         (getX 0) (getY 0) (getWidth 1) (getHeight 1) "新規作成"
     $btnNew.Add_Click({
-
+        Invoke-Item (getFilePath "excel-book")
     })
-    $btnNew.Enabled = $false
+    $btnNew.Enabled = $true
     # ローカルフォルダボタン
     $btnFolder = newButton `
         (getX 1) (getY 0) (getWidth 1) (getHeight 1) "ローカル`r`nフォルダ"
     $btnFolder.Add_Click({
-
+        $paths = (getDirPath "save-dirs") -split ";"
+        Invoke-Item (getDirPath $paths[0])
     })
-    $btnFolder.Enabled = $false
+    $btnFolder.Enabled = $true
     # アップロードボタン
     $btnUpload = newButton `
         (getX 0) (getY 1) (getWidth 1) (getHeight 1) "アップロード"
     $btnUpload.Add_Click({
-
+        $paths = (getDirPath "excel-book") -split ";"
+        Invoke-Item getDirPath $paths[0]
     })
     $btnUpload.Enabled = $false
     # インストールボタン
@@ -203,5 +222,26 @@ function makeForm {
     return $form
 }
 
+<#  ファイルのパスの取得    #>
+function getFilePath($key) {
+    return expandPath $CONFIG.install.files.$key $THIS_DICT $ture
+}
+
+<#  ディレクトリのパスの取得    #>
+function getDirPath($key) {
+    $path = expandPath $CONFIG.env.$THIS_ENV.dirs.$key $THIS_DICT $ture
+    return $path
+}
+
+function newProcess($key) {
+    $processOptions = @{
+        FilePath = getFilePath $key
+        UseNewEnvironment = $true
+    }
+    Start-Process @processOptions
+
+}
+
+$THIS_DICT = makePathDict $CONFIG.env.$THIS_ENV.dirs
 $form = makeForm
 $form.ShowDialog()

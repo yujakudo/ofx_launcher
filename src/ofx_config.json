@@ -3,12 +3,12 @@
     "env": {
         "debug": {
             "dirs": {
-                "base-dir": "C:/subsystem/msys64/home/yujak/発注書",
-                "launcher-dir": ".",
-                "template-dir": ".",
-                "doc-dir": ".",
-                "save-dirs": "発注書（葬儀）;発注書（法事）",
-                "letter-base-dir": "C:/subsystem/msys64/home/yujak/発注書",
+                "base-dir": "%AppDir%/..",
+                "launcher-dir": "src",
+                "template-dir": "resources",
+                "doc-dir": "resources",
+                "save-dirs": "demo/発注書（葬儀）;demo/発注書（法事）",
+                "letter-base-dir": "%base-dir%/demo",
                 "letter-dirs": "%letter-base-dir%/礼状　定型①;%letter-base-dir%/礼状　定型②"
             }
         },
