@@ -1,0 +1,93 @@
+{
+    "source-env": "online",
+    "env": {
+        "debug": {
+            "dirs": {
+                "base-dir": "C:/subsystem/msys64/home/yujak/発注書",
+                "launcher-dir": ".",
+                "template-dir": ".",
+                "doc-dir": ".",
+                "save-dirs": "発注書（葬儀）;発注書（法事）",
+                "letter-base-dir": "C:/subsystem/msys64/home/yujak/発注書",
+                "letter-dirs": "%letter-base-dir%/礼状　定型①;%letter-base-dir%/礼状　定型②"
+            }
+        },
+        "online": {
+            "dirs": {
+                "base-dir": "//As003151/共有フォルダ/40 セレモニー/50 各ＪＡ葬祭/50 葬祭諏訪/OA化推進/",
+                "launcher-dir": "アプリ/発注書ランチャー",
+                "template-dir": "テンプレート",
+                "doc-dir": "ドキュメント",
+                "save-dirs": "発注書（葬儀）;発注書（法事）",
+                "letter-base-dir": "//AC104010/Users/sousais/Desktop",
+                "letter-dirs": "%letter-base-dir%/礼状　定型①;%letter-base-dir%/礼状　定型②"
+            }
+        },
+        "mobile": {
+            "dirs": {
+                "base-dir": "%MyDocuments%/OA化推進",
+                "launcher-dir": "発注書ランチャ―",
+                "template-dir": "%Templates%",
+                "doc-dir": "ドキュメント",
+                "save-dirs": "発注書（葬儀）;発注書（法事）",
+                "letter-dirs": "礼状　定型①;礼状　定型②"
+            },
+            "excel-book": {
+                "settings": {
+                    "☆基準ディレクトリ": "%base-dir%",
+                    "☆保存フォルダ": "発注書（葬儀）",
+                    "☆データファイル": "%template-dir%/帳票データ.xlsx",
+                    "☆説明書パス": "%doc-dir%/OA発注書説明書.docx",
+                    "☆バーション管理パス": "%doc-dir%/発注書保守管理情報.xlsx",
+                    "☆礼状テンプレート": "%template-dir%/礼状定型文①.dotm;%template-dir%/礼状定型文②.dotm",
+                    "☆礼状保存フォルダ基準": "%base-dir%",
+                    "☆礼状保存フォルダ": "%letter-dirs%"
+                }
+            }
+        },
+        "USB": {
+            "dirs": {
+                "base-dir": "%Drive%/OA化推進",
+                "launcher-dir": "発注書ランチャ―",
+                "template-dir": "テンプレート",
+                "doc-dir": "ドキュメント",
+                "save-dirs": "発注書（葬儀）;発注書（法事）",
+                "letter-dirs": "礼状　定型①;礼状　定型②"
+            },
+            "excel-book": {
+                "settings": {
+                    "☆基準ディレクトリ": "%base-dir%",
+                    "☆保存フォルダ": "発注書（葬儀）",
+                    "☆データファイル": "%template-dir%/帳票データ.xlsx",
+                    "☆説明書パス": "%doc-dir%/OA発注書説明書.docx",
+                    "☆バーション管理パス": "%doc-dir%/発注書保守管理情報.xlsx",
+                    "☆礼状テンプレート": "%template-dir%/礼状定型文①.dotm;%template-dir%/礼状定型文②.dotm",
+                    "☆礼状保存フォルダ基準": "%base-dirs%",
+                    "☆礼状保存フォルダ": "%letter-dirs%"
+                }
+            }
+        }
+    },
+    "install": {
+        "files": {
+            "excel-book": "%template-dir%/発注書.xltm",
+            "data-book": "%template-dir%/帳票データ.xlsx",
+            "manual": "%doc-dir%/OA発注書説明書.docx",
+            "version-ctl": "%doc-dir%/発注書保守管理情報.xlsx",
+            "launch-bat": "%launcher-dir%/発注書ランチャ―.bat",
+            "launch-ps1": "%launcher-dir%/ofx_launch.ps1",
+            "install-ps1": "%launcher-dir%/ofx_install.ps1",
+            "lib-ps1": "%launcher-dir%/ofx_lib.ps1",
+            "icon": "%launcher-dir%/ofx.ico",
+            "config": "%launcher-dir%/ofx_config.json"
+        },
+        "dirs": [
+            "%base-dir%","%save-dirs%","%letter-dirs%"
+        ],
+        "shortcut": {
+            "name": "発注書ランチャ―",
+            "target": "launch-bat",
+            "icon": "icon"
+        }
+    }
+}
