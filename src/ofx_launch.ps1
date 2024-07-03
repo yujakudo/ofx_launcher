@@ -224,13 +224,12 @@ function makeForm {
 
 <#  ファイルのパスの取得    #>
 function getFilePath($key) {
-    return expandPath $CONFIG.install.files.$key $THIS_DICT $ture
+    return expandPath $CONFIG.install.files.$key $THIS_DICT $true
 }
 
 <#  ディレクトリのパスの取得    #>
 function getDirPath($key) {
-    $path = expandPath $CONFIG.env.$THIS_ENV.dirs.$key $THIS_DICT $ture
-    return $path
+    return expandPath $CONFIG.env.$THIS_ENV.dirs.$key $THIS_DICT $true
 }
 
 function newProcess($key) {
