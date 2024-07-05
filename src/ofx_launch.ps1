@@ -4,14 +4,23 @@
     2024.6.16   Initial writing.
 #>
 
+# アセンブリ
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
+# フォームの部品
+# ブロックのスコープでも使えるように AllScopeにしておく
+New-Variable -Name mainForm -Value $null -Option AllScope
+New-Variable -Name lblOnline -Value $null -Option AllScope
+New-Variable -Name lblUSB -Value $null -Option AllScope
+New-Variable -Name btnNew -Value $null -Option AllScope
+New-Variable -Name btnInstall -Value $null -Option AllScope
+New-Variable -Name btnFolder -Value $null -Option AllScope
+New-Variable -Name btnUpload -Value $null -Option AllScope
+
 # ライブラリのインポート
 # 設定ファイルも読み込まれ、グローバル変数に設定されている
 . "$($PSScriptRoot)\ofx_lib.ps1"
-
-New-Variable -Name lblOnline -Value $null -Option AllScope
-New-Variable -Name lblUSB -Value $null -Option AllScope
-New-Variable -Name btnFolder -Value $null -Option AllScope
-New-Variable -Name btnInstall -Value $null -Option AllScope
 
 <#
     コンソールウィンドウを最小化するためのコード
@@ -74,8 +83,6 @@ function init {
     #   環境変数の設定
     [Environment]::SetEnvironmentVariable($ENVVAR_NAME, $BOOK_CONF_PATH, 'User')    
     Hide-ConsoleWindow
-    $btnNew.Enabled = $true
-    $btnFolder.Enabled = $true
 }
 
 <#  終了処理
@@ -122,6 +129,7 @@ function newButton($x, $y, $width, $height, $text) {
     $btn.Enabled = $false
     return $btn
 }
+
 <#  ラベルの作成    #>
 function newLabel($x, $y, $width, $height, $text) {
     $lbl = New-Object System.Windows.Forms.Label
@@ -144,13 +152,26 @@ function switchLabel($lbl, $value) {
 
 }
 
+<#  フォームの作成    #>
+function newForm($x, $y, $width, $height, $caption, $objIcon, $controls) {
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text = $caption
+    $form.ClientSize=New-Object System.Drawing.Size($width,$height)
+    $form.StartPosition = "Manual"
+    $form.Location = "${x},${y}"
+    $form.MinimizeBox = $true
+    $form.MaximizeBox = $false
+    $form.Icon = $objIcon
+    foreach($cnt in $controls) {
+        $form.Controls.Add($cnt)
+    }
+    return $form
+}
+
 <#  フォーム
 #>
 function makeForm {
 
-    # アセンブリ
-    Add-Type -AssemblyName System.Windows.Forms
-    Add-Type -AssemblyName System.Drawing
     $scr = [System.Windows.Forms.SystemInformation]::WorkingArea.Size
 
     #   フォーム上のパーツ
@@ -162,7 +183,7 @@ function makeForm {
     $lblUSB = newLabel `
         (getX 1) (getY 2) (getWidth 1) (getHeight 0.5) "◎ USB drive"
     switchLabel $lblUSB $false
-        # 新規作成ボタン
+    # 新規作成ボタン
     $btnNew = newButton `
         (getX 0) (getY 0) (getWidth 1) (getHeight 1) "新規作成"
     $btnNew.Add_Click({
@@ -173,14 +194,13 @@ function makeForm {
         (getX 1) (getY 0) (getWidth 1) (getHeight 1) "ローカル`r`nフォルダ"
     $btnFolder.Add_Click({
         $paths = (getDirPath "save-dirs") -split ";"
-        Invoke-Item (getDirPath $paths[0])
+        Invoke-Item $paths[0]
     })
     # アップロードボタン
     $btnUpload = newButton `
         (getX 0) (getY 1) (getWidth 1) (getHeight 1) "アップロード"
     $btnUpload.Add_Click({
-        $paths = (getDirPath "excel-book") -split ";"
-        Invoke-Item getDirPath $paths[0]
+
     })
     # インストールボタン
     $btnInstall = newButton `
@@ -190,36 +210,25 @@ function makeForm {
     })
 
     # フォーム
-
     $w = (getX 2) - $PAD_COL + $MARGIN_W
     $h = (getY 2) + (getHeight 0.5) + $MARGIN_H
-    $form = New-Object System.Windows.Forms.Form
-
-    $form.Controls.Add($lblOnline)
-    $form.Controls.Add($lblUSB)
-    $form.Controls.Add($btnNew)
-    $form.Controls.Add($btnFolder)
-    $form.Controls.Add($btnUpload)
-    $form.Controls.Add($btnInstall)
-
-    $form.Text = "発注書ランチャー"
-    # $form.Size = New-Object System.Drawing.Size($w,$h)
-    $form.ClientSize=New-Object System.Drawing.Size($w,$h)
-    $form.MinimizeBox = $true
     $scr = [System.Windows.Forms.SystemInformation]::WorkingArea.Size
-    $x = $scr.Width - $w;   $y = 0;
-    $form.StartPosition = "Manual"
-    $form.Location = "${x},${y}"
+    $x = $scr.Width - $w
+    $y = 0
     $icon = new-object System.Drawing.Icon ($script:PSScriptRoot + "\ofx.ico")
-    $form.Icon = $icon
+    $controls = @(
+        $lblOnline, $lblUSB, $btnNew, $btnFolder, $btnUpload, $btnInstall
+    )
+    $mainForm = newForm $x $y $w $h "発注書ランチャー" $icon $controls
 
-    # $form.Opacity = 0.2
-    $form.Add_Shown({
+    $mainForm.Add_Shown({
         Write-Host "Initiarizing."
         init
+        $btnNew.Enabled = $true
+        $btnFolder.Enabled = $true
         Write-Host "Start."
     })
-    $form.Add_Closing({
+    $mainForm.Add_Closing({
         exitProc
         Write-Host "Done."
     })
@@ -229,11 +238,11 @@ function makeForm {
     $timer.Add_Tick({
         
     })
-    $timer.Interval = 1000
+    $timer.Interval = 2000
     $timer.Enabled = $true
     $timer.Start()
 
-    return $form
+    return $mainForm
 }
 
 <#  ファイルのパスの取得    #>
@@ -256,5 +265,14 @@ function newProcess($key) {
 }
 
 $THIS_DICT = makePathDict $CONFIG.env.$THIS_ENV.dirs
-$form = makeForm
-$form.ShowDialog()
+$mainForm = makeForm
+$mainForm.ShowDialog()
+
+Remove-Variable -Name mainForm
+Remove-Variable -Name lblOnline
+Remove-Variable -Name lblUSB
+Remove-Variable -Name btnNew
+Remove-Variable -Name btnInstall
+Remove-Variable -Name btnFolder
+Remove-Variable -Name btnUpload
+
