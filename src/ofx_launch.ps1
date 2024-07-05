@@ -8,6 +8,11 @@
 # 設定ファイルも読み込まれ、グローバル変数に設定されている
 . "$($PSScriptRoot)\ofx_lib.ps1"
 
+New-Variable -Name lblOnline -Value $null -Option AllScope
+New-Variable -Name lblUSB -Value $null -Option AllScope
+New-Variable -Name btnFolder -Value $null -Option AllScope
+New-Variable -Name btnInstall -Value $null -Option AllScope
+
 <#
     コンソールウィンドウを最小化するためのコード
     https://qiita.com/AWtnb/items/34fe77fda53820a8546e
@@ -45,8 +50,13 @@ function Hide-ConsoleWindow {
 <#   Excelファイルに渡す設定ファイルを作成し、保存する   #>
 function makeBookConf($dict) {
     # CONFIGファイルのenv > xxx > excel-book > settings　を切り出し
+    $settings = $CONFIG.env.$THIS_ENV."excel-book".settings
+    if($null -eq $settings) {
+        Write-Host "${CONF_PATH} の中に env>${THIS_ENV}>excel-book セクションがありません。"
+        exit
+    }
     # 辞書で変数をデコードする
-    $settings = convertVars $CONFIG.env.$THIS_ENV."excel-book".settings $dict
+    $settings = convertVars $settings $dict
     # $settings | Add-Member -MemberType NoteProperty -Name 'env' -Value $THIS_ENV
     # JSONテキストに変換して保存する
     $settings | ConvertTo-Json -Depth 32 | Out-File $BOOK_CONF_PATH -Encoding default
@@ -64,6 +74,8 @@ function init {
     #   環境変数の設定
     [Environment]::SetEnvironmentVariable($ENVVAR_NAME, $BOOK_CONF_PATH, 'User')    
     Hide-ConsoleWindow
+    $btnNew.Enabled = $true
+    $btnFolder.Enabled = $true
 }
 
 <#  終了処理
@@ -107,6 +119,7 @@ function newButton($x, $y, $width, $height, $text) {
     $btn.Size = New-Object System.Drawing.Size($width, $height)
     $btn.Font = New-Object System.Drawing.Font($FONT_FAMILY, $FONT_SIZE)
     $btn.Text = $text
+    $btn.Enabled = $false
     return $btn
 }
 <#  ラベルの作成    #>
@@ -140,10 +153,55 @@ function makeForm {
     Add-Type -AssemblyName System.Drawing
     $scr = [System.Windows.Forms.SystemInformation]::WorkingArea.Size
 
+    #   フォーム上のパーツ
+
+    # ラベル
+    $lblOnline = newLabel `
+        (getX 0) (getY 2) (getWidth 1) (getHeight 0.5) "◎ Net drive"
+    switchLabel $lblOnline $false
+    $lblUSB = newLabel `
+        (getX 1) (getY 2) (getWidth 1) (getHeight 0.5) "◎ USB drive"
+    switchLabel $lblUSB $false
+        # 新規作成ボタン
+    $btnNew = newButton `
+        (getX 0) (getY 0) (getWidth 1) (getHeight 1) "新規作成"
+    $btnNew.Add_Click({
+        Invoke-Item (getFilePath "excel-book")
+    })
+    # ローカルフォルダボタン
+    $btnFolder = newButton `
+        (getX 1) (getY 0) (getWidth 1) (getHeight 1) "ローカル`r`nフォルダ"
+    $btnFolder.Add_Click({
+        $paths = (getDirPath "save-dirs") -split ";"
+        Invoke-Item (getDirPath $paths[0])
+    })
+    # アップロードボタン
+    $btnUpload = newButton `
+        (getX 0) (getY 1) (getWidth 1) (getHeight 1) "アップロード"
+    $btnUpload.Add_Click({
+        $paths = (getDirPath "excel-book") -split ";"
+        Invoke-Item getDirPath $paths[0]
+    })
+    # インストールボタン
+    $btnInstall = newButton `
+        (getX 1) (getY 1) (getWidth 1) (getHeight 1) "インストール"
+    $btnInstall.Add_Click({
+
+    })
+
     # フォーム
+
     $w = (getX 2) - $PAD_COL + $MARGIN_W
     $h = (getY 2) + (getHeight 0.5) + $MARGIN_H
     $form = New-Object System.Windows.Forms.Form
+
+    $form.Controls.Add($lblOnline)
+    $form.Controls.Add($lblUSB)
+    $form.Controls.Add($btnNew)
+    $form.Controls.Add($btnFolder)
+    $form.Controls.Add($btnUpload)
+    $form.Controls.Add($btnInstall)
+
     $form.Text = "発注書ランチャー"
     # $form.Size = New-Object System.Drawing.Size($w,$h)
     $form.ClientSize=New-Object System.Drawing.Size($w,$h)
@@ -165,50 +223,6 @@ function makeForm {
         exitProc
         Write-Host "Done."
     })
-    # ラベル
-    $lblOnline = newLabel `
-        (getX 0) (getY 2) (getWidth 1) (getHeight 0.5) "◎ Net drive"
-    switchLabel $lblOnline $false
-    $lblUSB = newLabel `
-        (getX 1) (getY 2) (getWidth 1) (getHeight 0.5) "◎ USB drive"
-    switchLabel $lblUSB $false
-        # 新規作成ボタン
-    $btnNew = newButton `
-        (getX 0) (getY 0) (getWidth 1) (getHeight 1) "新規作成"
-    $btnNew.Add_Click({
-        Invoke-Item (getFilePath "excel-book")
-    })
-    $btnNew.Enabled = $true
-    # ローカルフォルダボタン
-    $btnFolder = newButton `
-        (getX 1) (getY 0) (getWidth 1) (getHeight 1) "ローカル`r`nフォルダ"
-    $btnFolder.Add_Click({
-        $paths = (getDirPath "save-dirs") -split ";"
-        Invoke-Item (getDirPath $paths[0])
-    })
-    $btnFolder.Enabled = $true
-    # アップロードボタン
-    $btnUpload = newButton `
-        (getX 0) (getY 1) (getWidth 1) (getHeight 1) "アップロード"
-    $btnUpload.Add_Click({
-        $paths = (getDirPath "excel-book") -split ";"
-        Invoke-Item getDirPath $paths[0]
-    })
-    $btnUpload.Enabled = $false
-    # インストールボタン
-    $btnInstall = newButton `
-        (getX 1) (getY 1) (getWidth 1) (getHeight 1) "インストール"
-    $btnInstall.Add_Click({
-
-    })
-    $btnInstall.Enabled = $false
-
-    $form.Controls.Add($lblOnline)
-    $form.Controls.Add($lblUSB)
-    $form.Controls.Add($btnNew)
-    $form.Controls.Add($btnFolder)
-    $form.Controls.Add($btnUpload)
-    $form.Controls.Add($btnInstall)
 
     # タイマー
     $timer = New-Object Windows.Forms.Timer

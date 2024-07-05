@@ -62,6 +62,10 @@ function echoVars {
 <#  パスのための辞書を作る
 #>
 function makePathDict($obj, $drive_letter="") {
+    if($null -eq $obj) {
+        Write-Host "makePathDict に渡された PSObject は null です。"
+        exit
+    }
     # ドライブが指定されていなかったら、スクリプトと同じ場所
     if( $drive_letter -eq "") {
         $drive_letter = $script:PSScriptRoot.Substring(0, 2)
@@ -99,6 +103,10 @@ function expandPath($path, $dict, $add_base) {
 
 <#  辞書で、データ中の変数を展開する    #>
 function convertVars($data, $dict, $add_base=$false) {
+    if($null -eq $data) {
+        Write-Host "convertVars に渡された PSObject は null です。"
+        exit
+    }
     foreach($key in $data.psobject.properties.name) {
         $data.$key = expandPath $data.$key $dict $add_base
     }
