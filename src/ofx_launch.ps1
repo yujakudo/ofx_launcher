@@ -8,16 +8,6 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-# フォームの部品
-# ブロックのスコープでも使えるように AllScopeにしておく
-New-Variable -Name mainForm -Value $null -Option AllScope
-New-Variable -Name lblOnline -Value $null -Option AllScope
-New-Variable -Name lblUSB -Value $null -Option AllScope
-New-Variable -Name btnNew -Value $null -Option AllScope
-New-Variable -Name btnInstall -Value $null -Option AllScope
-New-Variable -Name btnFolder -Value $null -Option AllScope
-New-Variable -Name btnUpload -Value $null -Option AllScope
-
 # ライブラリのインポート
 # 設定ファイルも読み込まれ、グローバル変数に設定されている
 . "$($PSScriptRoot)\ofx_lib.ps1"
@@ -71,6 +61,16 @@ function makeBookConf($dict) {
     $settings | ConvertTo-Json -Depth 32 | Out-File $BOOK_CONF_PATH -Encoding default
 }
 
+<#  ファイルのパスの取得    #>
+function getFilePath($key) {
+    return expandPath $CONFIG.install.files.$key $THIS_DICT $true
+}
+
+<#  ディレクトリのパスの取得    #>
+function getDirPath($key) {
+    return expandPath $CONFIG.env.$THIS_ENV.dirs.$key $THIS_DICT $true
+}
+
 <#  初期化処理
 #>
 function init {
@@ -82,7 +82,6 @@ function init {
     }
     #   環境変数の設定
     [Environment]::SetEnvironmentVariable($ENVVAR_NAME, $BOOK_CONF_PATH, 'User')    
-    Hide-ConsoleWindow
 }
 
 <#  終了処理
@@ -119,26 +118,42 @@ function getHeight($num) {
   
 }
 
+<#  フォームの作成    #>
+function newForm($dlg, $name, $x, $y, $width, $height, $caption, $objIcon) {
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text = $caption
+    $form.ClientSize=New-Object System.Drawing.Size($width,$height)
+    $form.StartPosition = "Manual"
+    $form.Location = "${x},${y}"
+    $form.MinimizeBox = $true
+    $form.MaximizeBox = $false
+    $form.Icon = $objIcon
+    foreach($key in $dlg.psobject.properties.name) {
+        $form.Controls.Add($dlg.$key)
+    }
+    $dlg | Add-Member -MemberType NoteProperty -Name $name -Value $form
+}
+
 <#  ボタンの作成    #>
-function newButton($x, $y, $width, $height, $text) {
+function newButton($dlg, $name, $x, $y, $width, $height, $text) {
     $btn = New-Object System.Windows.Forms.Button
     $btn.Location = "${x},${y}"
     $btn.Size = New-Object System.Drawing.Size($width, $height)
     $btn.Font = New-Object System.Drawing.Font($FONT_FAMILY, $FONT_SIZE)
     $btn.Text = $text
     $btn.Enabled = $false
-    return $btn
+    $dlg | Add-Member -MemberType NoteProperty -Name $name -Value $btn
 }
 
 <#  ラベルの作成    #>
-function newLabel($x, $y, $width, $height, $text) {
+function newLabel($dlg, $name, $x, $y, $width, $height, $text) {
     $lbl = New-Object System.Windows.Forms.Label
     $lbl.Location = "${x},${y}"
     $lbl.Size = New-Object System.Drawing.Size($width, $height)
     $lbl.Font = New-Object System.Drawing.Font($FONT_FAMILY, $FONT_SIZE)
     $lbl.BackColor = "#F8F8F8"
     $lbl.Text = $text
-    return $lbl
+    $dlg | Add-Member -MemberType NoteProperty -Name $name -Value $lbl
 }
 
 function switchLabel($lbl, $value) {
@@ -152,62 +167,39 @@ function switchLabel($lbl, $value) {
 
 }
 
-<#  フォームの作成    #>
-function newForm($x, $y, $width, $height, $caption, $objIcon, $controls) {
-    $form = New-Object System.Windows.Forms.Form
-    $form.Text = $caption
-    $form.ClientSize=New-Object System.Drawing.Size($width,$height)
-    $form.StartPosition = "Manual"
-    $form.Location = "${x},${y}"
-    $form.MinimizeBox = $true
-    $form.MaximizeBox = $false
-    $form.Icon = $objIcon
-    foreach($cnt in $controls) {
-        $form.Controls.Add($cnt)
-    }
-    return $form
+<#  タイマーの作成  #>
+function newTimer($dlg, $name, $interval_ms) {
+    $timer = New-Object Windows.Forms.Timer
+    $timer.Interval = $interval_ms
+    $timer.Enabled = $true
+    $dlg | Add-Member -MemberType NoteProperty -Name $name -Value $timer
 }
 
-<#  フォーム
+<#  フォームを作成する
 #>
-function makeForm {
-
-    $scr = [System.Windows.Forms.SystemInformation]::WorkingArea.Size
+function makeDialog {
+    $dlg =  New-Object PSCustomObject
 
     #   フォーム上のパーツ
-
     # ラベル
-    $lblOnline = newLabel `
+    newLabel $dlg "lblOnline" `
         (getX 0) (getY 2) (getWidth 1) (getHeight 0.5) "◎ Net drive"
-    switchLabel $lblOnline $false
-    $lblUSB = newLabel `
+    switchLabel $dlg.lblOnline $false
+    newLabel $dlg "lblUSB" `
         (getX 1) (getY 2) (getWidth 1) (getHeight 0.5) "◎ USB drive"
-    switchLabel $lblUSB $false
+    switchLabel $dlg.lblUSB $false
     # 新規作成ボタン
-    $btnNew = newButton `
+    newButton $dlg "btnNew" `
         (getX 0) (getY 0) (getWidth 1) (getHeight 1) "新規作成"
-    $btnNew.Add_Click({
-        Invoke-Item (getFilePath "excel-book")
-    })
     # ローカルフォルダボタン
-    $btnFolder = newButton `
+    newButton $dlg "btnFolder" `
         (getX 1) (getY 0) (getWidth 1) (getHeight 1) "ローカル`r`nフォルダ"
-    $btnFolder.Add_Click({
-        $paths = (getDirPath "save-dirs") -split ";"
-        Invoke-Item $paths[0]
-    })
     # アップロードボタン
-    $btnUpload = newButton `
+    newButton $dlg "btnUpload" `
         (getX 0) (getY 1) (getWidth 1) (getHeight 1) "アップロード"
-    $btnUpload.Add_Click({
-
-    })
     # インストールボタン
-    $btnInstall = newButton `
+    newButton $dlg "btnInstall" `
         (getX 1) (getY 1) (getWidth 1) (getHeight 1) "インストール"
-    $btnInstall.Add_Click({
-
-    })
 
     # フォーム
     $w = (getX 2) - $PAD_COL + $MARGIN_W
@@ -216,63 +208,62 @@ function makeForm {
     $x = $scr.Width - $w
     $y = 0
     $icon = new-object System.Drawing.Icon ($script:PSScriptRoot + "\ofx.ico")
-    $controls = @(
-        $lblOnline, $lblUSB, $btnNew, $btnFolder, $btnUpload, $btnInstall
-    )
-    $mainForm = newForm $x $y $w $h "発注書ランチャー" $icon $controls
-
-    $mainForm.Add_Shown({
-        Write-Host "Initiarizing."
-        init
-        $btnNew.Enabled = $true
-        $btnFolder.Enabled = $true
-        Write-Host "Start."
-    })
-    $mainForm.Add_Closing({
-        exitProc
-        Write-Host "Done."
-    })
-
+    newForm $dlg "form" $x $y $w $h "発注書ランチャー" $icon
     # タイマー
-    $timer = New-Object Windows.Forms.Timer
-    $timer.Add_Tick({
-        
-    })
-    $timer.Interval = 2000
-    $timer.Enabled = $true
-    $timer.Start()
+    newTimer $dlg "timer" 2500
 
-    return $mainForm
+    return $dlg
 }
 
-<#  ファイルのパスの取得    #>
-function getFilePath($key) {
-    return expandPath $CONFIG.install.files.$key $THIS_DICT $true
-}
+# フォームの部品
+# ブロックのスコープでも使えるように AllScopeにしておく
+# New-Variable -Name DIALOG -Value $null -Option AllScope
 
-<#  ディレクトリのパスの取得    #>
-function getDirPath($key) {
-    return expandPath $CONFIG.env.$THIS_ENV.dirs.$key $THIS_DICT $true
-}
-
-function newProcess($key) {
-    $processOptions = @{
-        FilePath = getFilePath $key
-        UseNewEnvironment = $true
-    }
-    Start-Process @processOptions
-
-}
-
+# この環境の辞書を作成
 $THIS_DICT = makePathDict $CONFIG.env.$THIS_ENV.dirs
-$mainForm = makeForm
-$mainForm.ShowDialog()
+# フォームを作成
+$DIALOG = makeDialog
 
-Remove-Variable -Name mainForm
-Remove-Variable -Name lblOnline
-Remove-Variable -Name lblUSB
-Remove-Variable -Name btnNew
-Remove-Variable -Name btnInstall
-Remove-Variable -Name btnFolder
-Remove-Variable -Name btnUpload
+# イベント処理
 
+# フォームが表示されたときの処理
+$DIALOG.form.Add_Shown({
+    Write-Host "Initiarizing."
+    init
+    $DIALOG.btnNew.Enabled = $true
+    $DIALOG.btnFolder.Enabled = $true
+    $DIALOG.timer.Start()
+    Write-Host "Start."
+})
+# フォームを閉じるときの処理
+$DIALOG.form.Add_Closing({
+    exitProc
+    Write-Host "Done."
+})
+# 新規作成ボタンのクリック
+$DIALOG.btnNew.Add_Click({
+    Invoke-Item (getFilePath "excel-book")
+})
+# ローカルフォルダボタンのクリック
+$DIALOG.btnFolder.Add_Click({
+    $paths = (getDirPath "save-dirs") -split ";"
+    Invoke-Item $paths[0]
+})
+# アップロードボタンのクリック
+$DIALOG.btnUpload.Add_Click({
+
+})
+# インストールボタンのクリック
+$DIALOG.btnInstall.Add_Click({
+
+})
+# タイマー処理
+$DIALOG.timer.Add_Tick({
+    
+})
+# フォームを表示
+Hide-ConsoleWindow
+$DIALOG.form.ShowDialog()
+# 終了
+Remove-Variable -Name DIALOG
+Remove-Variable -Name THIS_DICT
