@@ -8,6 +8,9 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+# PowerShellのパス
+$POWER_SHELL = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+
 # ライブラリのインポート
 # 設定ファイルも読み込まれ、グローバル変数に設定されている
 . "$($PSScriptRoot)\ofx_lib.ps1"
@@ -67,8 +70,11 @@ function getFilePath($key) {
 }
 
 <#  ディレクトリのパスの取得    #>
-function getDirPath($key) {
-    return expandPath $CONFIG.env.$THIS_ENV.dirs.$key $THIS_DICT $true
+function getDirPath($key, $dict=$null) {
+    if($null -eq $dict) {
+        $dict = $THIS_DICT
+    }
+    return expandPath $CONFIG.env.$THIS_ENV.dirs.$key $dict $true
 }
 
 <#  初期化処理
@@ -89,6 +95,31 @@ function init {
 function exitProc {
     #   環境変数の削除
     [Environment]::SetEnvironmentVariable($ENVVAR_NAME, "", 'User')    
+}
+
+<#  オンラインのチェック    #>
+function checkOnline {
+    $new_status = IsOnline
+    if($new_status -ne $STATUS.isOnline) {
+        $STATUS.isOnline = $new_status
+        switchLabel $DIALOG.lblOnline $new_status
+        $DIALOG.btnUpload.Enabled = $new_status
+        return $true
+    }
+    return $false
+}
+
+<#  リムーバブルメディアのチェック    #>
+function checkMedia {
+    $new_usbs = (Get-WmiObject CIM_LogicalDisk | Where-Object DriveType -eq 2).DeviceID
+    if($new_usbs.length -ne $STATUS.usbs.length) {
+        $STATUS.usbs = $new_usbs
+        $exists = ($new_usbs.length -gt 0)
+        switchLabel $DIALOG.lblUSB $exists
+        $DIALOG.btnInstall.Enabled = $exists
+        return $true
+    }
+    return $false
 }
 
 # $FONT_FAMILY = "游ゴシック Medium"
@@ -171,7 +202,7 @@ function switchLabel($lbl, $value) {
 function newTimer($dlg, $name, $interval_ms) {
     $timer = New-Object Windows.Forms.Timer
     $timer.Interval = $interval_ms
-    $timer.Enabled = $true
+    $timer.Enabled = $false
     $dlg | Add-Member -MemberType NoteProperty -Name $name -Value $timer
 }
 
@@ -183,7 +214,7 @@ function makeDialog {
     #   フォーム上のパーツ
     # ラベル
     newLabel $dlg "lblOnline" `
-        (getX 0) (getY 2) (getWidth 1) (getHeight 0.5) "◎ Net drive"
+        (getX 0) (getY 2) (getWidth 1) (getHeight 0.5) "◎ Net folder"
     switchLabel $dlg.lblOnline $false
     newLabel $dlg "lblUSB" `
         (getX 1) (getY 2) (getWidth 1) (getHeight 0.5) "◎ USB drive"
@@ -221,6 +252,11 @@ function makeDialog {
 
 # この環境の辞書を作成
 $THIS_DICT = makePathDict $CONFIG.env.$THIS_ENV.dirs
+# 状態管理
+$STATUS = [PSCustomObject]@{
+    isOnline = $false
+    usbs = @()
+}
 # フォームを作成
 $DIALOG = makeDialog
 
@@ -232,13 +268,16 @@ $DIALOG.form.Add_Shown({
     init
     $DIALOG.btnNew.Enabled = $true
     $DIALOG.btnFolder.Enabled = $true
+    $DIALOG.timer.Enabled = $true
     $DIALOG.timer.Start()
     Write-Host "Start."
 })
 # フォームを閉じるときの処理
 $DIALOG.form.Add_Closing({
+    $DIALOG.timer.Stop()
+    $DIALOG.timer.Enabled = $false
     exitProc
-    Write-Host "Done."
+    Write-Host "Finished."
 })
 # 新規作成ボタンのクリック
 $DIALOG.btnNew.Add_Click({
@@ -251,15 +290,36 @@ $DIALOG.btnFolder.Add_Click({
 })
 # アップロードボタンのクリック
 $DIALOG.btnUpload.Add_Click({
+    $dest_dict = makePathDict $CONFIG.env.online.dirs
+    foreach($key in @("save-dirs", "letter-dirs")) {
+        $src_dirs = (getDirPath $key) -split ";"
+        $dest_dirs = (getDirPath $key $dest_dict) -split ";"
+        for($i; $i -lt $src_dirs.length; $i++) {
+            if((Test-Path -LiteralPath $src_dirs[$i]) `
+                -and (Test-Path -LiteralPath $dest_dirs[$i])) {
 
+                Move-Item -Path "${src_dirs[$i]}\*.*" -Destination $dest_dirs[$i]
+            }
+        }
+    }
 })
 # インストールボタンのクリック
 $DIALOG.btnInstall.Add_Click({
-
+    # 呼び出すスクリプトを指定
+    $script = getFilePath "install-ps1"
+    $script_args = "--install --mediaonly"
+    $Argument   = "-Command ${script} ${script_args}"
+    Start-Process -FilePath $POWER_SHELL -ArgumentList $Argument
 })
 # タイマー処理
 $DIALOG.timer.Add_Tick({
-    
+    if(checkOnline) {
+        Write-Host "network folder: ${STATUS.isOnline}"
+    }
+    if(checkMedia) {
+        $drives = $STATUS.usbs -join ","
+        Write-Host  "removable media: ${drives}"
+    }
 })
 # フォームを表示
 Hide-ConsoleWindow
