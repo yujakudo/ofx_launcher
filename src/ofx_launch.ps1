@@ -4,6 +4,8 @@
     2024.6.16   Initial writing.
 #>
 
+Set-StrictMode -Version 2.0
+
 # アセンブリ
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -12,7 +14,7 @@ Add-Type -AssemblyName System.Drawing
 $POWER_SHELL = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 
 # ライブラリのインポート
-# 設定ファイルも読み込まれ、グローバル変数に設定されている
+# 設定ファイルも読み込まれ、グローバル変数に設定される
 . "$($PSScriptRoot)\ofx_lib.ps1"
 
 <#
@@ -100,26 +102,91 @@ function exitProc {
 <#  オンラインのチェック    #>
 function checkOnline {
     $new_status = IsOnline
-    if($new_status -ne $STATUS.isOnline) {
-        $STATUS.isOnline = $new_status
-        switchLabel $DIALOG.lblOnline $new_status
-        $DIALOG.btnUpload.Enabled = $new_status
-        return $true
+    # オンラインの状態が変わらなければ終了
+    if($new_status -eq $STATUS.isOnline) {
+        return $false
     }
-    return $false
+    # 表示とボタンの切り替え
+    switchLabel $DIALOG.lblOnline $new_status
+    $DIALOG.btnUpload.Enabled = $new_status
+    # 状態の更新
+    $STATUS.isOnline = $new_status
+    return $true
 }
 
 <#  リムーバブルメディアのチェック    #>
 function checkMedia {
     $new_usbs = (Get-WmiObject CIM_LogicalDisk | Where-Object DriveType -eq 2).DeviceID
-    if($new_usbs.length -ne $STATUS.usbs.length) {
-        $STATUS.usbs = $new_usbs
-        $exists = ($new_usbs.length -gt 0)
-        switchLabel $DIALOG.lblUSB $exists
-        $DIALOG.btnInstall.Enabled = $exists
-        return $true
+    $new_str_usbs = $new_usbs -join
+    # メディアの状態が変わらなければ終了
+    if($new_str_usbs -eq $STATUS.str_usbs) {
+        return $false
     }
-    return $false
+    # 表示とボタンの切り替え
+    $exists = ($new_usbs.length -gt 0)
+    switchLabel $DIALOG.lblUSB $exists
+    $DIALOG.btnInstall.Enabled = $exists
+    # 新規のドライブがあったらアップデート
+    if($exists) {
+        foreach($drv in $new_usbs) {
+            if( -not $STATUS.usbs.Contains($drv)) {
+                callInstaller "--update --mediaonly"
+                break
+            }
+        }
+    }
+    # 状態の更新
+    $STATUS.usbs = $new_usbs
+    $STATUS.str_usbs = $new_str_usbs
+    return $true
+}
+
+<#  ファイルの移動  #>
+function moveFiles($drv_inf, $net_dirs) {
+    $src_dirs = makeDirList $drv_inf["env"] $drv_inf["letter"]
+    for($i; $i -lt $src_dirs.length; $i++) {
+        $src = $src_dirs[$i]
+        $dest = $net_dirs[$i]
+        Write-Host "#${i} moving files in ${src}"
+        Write-Host "to ${dest}"
+        if((Split-Path -Leaf $src) -ne (Split-Path -Leaf $src)){
+            Write-Host "Wrong folder name." -ForegroundColor "Red"
+            break
+        } else if( -not (Test-Path -LiteralPath $src)) {
+            Write-Host "A source folder does not exist." -ForegroundColor "Yellow"
+        } else if( -not (Test-Path -LiteralPath $dest)) {
+            Write-Host "A destination folder does not exist." -ForegroundColor "Yellow"
+        } else {
+            Move-Item -Path "${src}\*.*" -Destination $dest
+        }
+    }
+}
+
+<#  コピーするディレクトリのリストを作る    #>
+function makeDirList($env, $drive_letter) {
+    $dict = makePathDict $CONFIG.env.$env.dirs $drive_letter
+    $lst = (getDirPath "save-dirs" $dict) -split ";"
+    $lst += (getDirPath "letter-dirs" $dict) -split ";"
+    return $lst
+}
+
+<#  ネットワークフォルダにアップロードする    #>
+function moveFilesToNet {
+    $drv_infs = getDrives
+    $net_dirs = makeDirList "online" "\\"
+    foreach($key in $drv_infs.Keys) {
+        if($drv_infs[$key]["exists"]) {
+            moveFiles $drv_infs[$key] $net_dirs
+        }
+    }
+}
+
+function callInstaller($str_arg) {
+    # 呼び出すスクリプトを指定
+    $script = getFilePath "install-ps1"
+    $Argument   = "-Command `"${script}`" ${str_arg}"
+    Start-Process -FilePath $POWER_SHELL -ArgumentList $Argument
+
 }
 
 # $FONT_FAMILY = "游ゴシック Medium"
@@ -187,12 +254,13 @@ function newLabel($dlg, $name, $x, $y, $width, $height, $text) {
     $dlg | Add-Member -MemberType NoteProperty -Name $name -Value $lbl
 }
 
+<#  ラベルのON/OFF  #>
 function switchLabel($lbl, $value) {
     if($value) {
-        $lbl.Text = $lbl.Text.Replace("◎", "?")
+        $lbl.Text = $lbl.Text.Replace("○", "●")
         $lbl.forecolor = "#FF8080"
     } else {
-        $lbl.Text = $lbl.Text.Replace("?", "◎")
+        $lbl.Text = $lbl.Text.Replace("●", "○")
         $lbl.forecolor = "#808080"
     }
 
@@ -256,6 +324,7 @@ $THIS_DICT = makePathDict $CONFIG.env.$THIS_ENV.dirs
 $STATUS = [PSCustomObject]@{
     isOnline = $false
     usbs = @()
+    str_usbs = ""
 }
 # フォームを作成
 $DIALOG = makeDialog
@@ -290,26 +359,10 @@ $DIALOG.btnFolder.Add_Click({
 })
 # アップロードボタンのクリック
 $DIALOG.btnUpload.Add_Click({
-    $dest_dict = makePathDict $CONFIG.env.online.dirs
-    foreach($key in @("save-dirs", "letter-dirs")) {
-        $src_dirs = (getDirPath $key) -split ";"
-        $dest_dirs = (getDirPath $key $dest_dict) -split ";"
-        for($i; $i -lt $src_dirs.length; $i++) {
-            if((Test-Path -LiteralPath $src_dirs[$i]) `
-                -and (Test-Path -LiteralPath $dest_dirs[$i])) {
-
-                Move-Item -Path "${src_dirs[$i]}\*.*" -Destination $dest_dirs[$i]
-            }
-        }
-    }
 })
 # インストールボタンのクリック
 $DIALOG.btnInstall.Add_Click({
-    # 呼び出すスクリプトを指定
-    $script = getFilePath "install-ps1"
-    $script_args = "--install --mediaonly"
-    $Argument   = "-Command ${script} ${script_args}"
-    Start-Process -FilePath $POWER_SHELL -ArgumentList $Argument
+    callInstaller "--install --mediaonly"
 })
 # タイマー処理
 $DIALOG.timer.Add_Tick({

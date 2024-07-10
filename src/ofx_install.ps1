@@ -4,6 +4,8 @@
     2024.6.16   Initial writing.
 #>
 
+Set-StrictMode -Version 2.0
+
 # ライブラリのインポート
 . "$($PSScriptRoot)\ofx_lib.ps1"
 
