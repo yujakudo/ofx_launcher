@@ -4,7 +4,7 @@
     2024.6.16   Initial writing.
 #>
 
-Set-StrictMode -Version 2.0
+Set-StrictMode -Version 1.0
 
 # アセンブリ
 Add-Type -AssemblyName System.Windows.Forms
@@ -28,7 +28,11 @@ function Get-ConsoleWindowHandle {
         if ($i++ -gt 10) {
             return $null
         }
-        $p = $p.Parent
+        if("Parent" -in $p.PSobject.Properties.Name) {
+            $p = $p.Parent
+        } else {
+            break
+        }
     }
     return $p.MainWindowHandle
 }
@@ -72,11 +76,14 @@ function getFilePath($key) {
 }
 
 <#  ディレクトリのパスの取得    #>
-function getDirPath($key, $dict=$null) {
+function getDirPath($key, $env=$null, $dict=$null) {
+    if($null -eq $env) {
+        $env = $THIS_ENV
+    }
     if($null -eq $dict) {
         $dict = $THIS_DICT
     }
-    return expandPath $CONFIG.env.$THIS_ENV.dirs.$key $dict $true
+    return expandPath $CONFIG.env.$env.dirs.$key $dict $true
 }
 
 <#  初期化処理
@@ -117,7 +124,12 @@ function checkOnline {
 <#  リムーバブルメディアのチェック    #>
 function checkMedia {
     $new_usbs = (Get-WmiObject CIM_LogicalDisk | Where-Object DriveType -eq 2).DeviceID
-    $new_str_usbs = $new_usbs -join
+    if($null -eq $new_usbs) {
+        $new_usbs = $()
+        $new_str_usbs = ""
+    } else {
+        $new_str_usbs = $new_usbs -join ","
+    }
     # メディアの状態が変わらなければ終了
     if($new_str_usbs -eq $STATUS.str_usbs) {
         return $false
@@ -144,7 +156,7 @@ function checkMedia {
 <#  ファイルの移動  #>
 function moveFiles($drv_inf, $net_dirs) {
     $src_dirs = makeDirList $drv_inf["env"] $drv_inf["letter"]
-    for($i; $i -lt $src_dirs.length; $i++) {
+    for($i=0; $i -le $src_dirs.length; $i++) {
         $src = $src_dirs[$i]
         $dest = $net_dirs[$i]
         Write-Host "#${i} moving files in ${src}"
@@ -152,9 +164,9 @@ function moveFiles($drv_inf, $net_dirs) {
         if((Split-Path -Leaf $src) -ne (Split-Path -Leaf $src)){
             Write-Host "Wrong folder name." -ForegroundColor "Red"
             break
-        } else if( -not (Test-Path -LiteralPath $src)) {
+        } elseif( -not (Test-Path -LiteralPath $src)) {
             Write-Host "A source folder does not exist." -ForegroundColor "Yellow"
-        } else if( -not (Test-Path -LiteralPath $dest)) {
+        } elseif( -not (Test-Path -LiteralPath $dest)) {
             Write-Host "A destination folder does not exist." -ForegroundColor "Yellow"
         } else {
             Move-Item -Path "${src}\*.*" -Destination $dest
@@ -165,8 +177,8 @@ function moveFiles($drv_inf, $net_dirs) {
 <#  コピーするディレクトリのリストを作る    #>
 function makeDirList($env, $drive_letter) {
     $dict = makePathDict $CONFIG.env.$env.dirs $drive_letter
-    $lst = (getDirPath "save-dirs" $dict) -split ";"
-    $lst += (getDirPath "letter-dirs" $dict) -split ";"
+    $lst = (getDirPath "save-dirs" $env $dict) -split ";"
+    $lst += (getDirPath "letter-dirs" $env $dict) -split ";"
     return $lst
 }
 
@@ -359,6 +371,7 @@ $DIALOG.btnFolder.Add_Click({
 })
 # アップロードボタンのクリック
 $DIALOG.btnUpload.Add_Click({
+    moveFilesToNet
 })
 # インストールボタンのクリック
 $DIALOG.btnInstall.Add_Click({

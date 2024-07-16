@@ -166,14 +166,16 @@ function getDriveInfo($drive) {
 function getDrives($only_usb=$false) {
     # Cドライブの情報。初期メンバーは、PCのドライブ（C:、mobile）
     $drives = @{}
-    if($only_usb) {
+    if(-not $only_usb) {
         $drives.Add("C:", (getDriveInfo "C:"))
     }
     # USB（リムーバブルメディア）のドライブを取得
     $usbs = (Get-WmiObject CIM_LogicalDisk | Where-Object DriveType -eq 2).DeviceID
-    foreach( $usb in $usbs) {
-        # ここのドライブの情報を取得
-        $drives.Add($usb, (getDriveInfo $usb))
+    if($null -ne $usbs) {
+        foreach( $usb in $usbs) {
+            # ここのドライブの情報を取得
+            $drives.Add($usb, (getDriveInfo $usb))
+        }
     }
     return $drives
 }
