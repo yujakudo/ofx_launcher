@@ -44,6 +44,13 @@
                 "save-dirs": "発注書（葬儀）;発注書（法事）",
                 "letter-dirs": "礼状　定型①;礼状　定型②"
             },
+            "shortcut": {
+                "name": "発注書ランチャー",
+                "target": "launch-bat",
+                "dir": "%Desktop%",
+                "working-dir": "%launcher-dir%",
+                "icon": "icon"
+            },
             "excel-book": {
                 "settings": {
                     "☆基準ディレクトリ": "%base-dir%",
@@ -65,6 +72,13 @@
                 "doc-dir": "ドキュメント",
                 "save-dirs": "発注書（葬儀）;発注書（法事）",
                 "letter-dirs": "礼状　定型①;礼状　定型②"
+            },
+            "shortcut": {
+                "name": "発注書ランチャー",
+                "target": "launch-bat",
+                "dir": "%base-dir%",
+                "working-dir": "%launcher-dir%",
+                "icon": "icon"
             },
             "excel-book": {
                 "settings": {
@@ -95,11 +109,6 @@
         },
         "dirs": [
             "%base-dir%","%save-dirs%","%letter-dirs%"
-        ],
-        "shortcut": {
-            "name": "発注書ランチャ―",
-            "target": "launch-bat",
-            "icon": "icon"
-        }
+        ]
     }
 }

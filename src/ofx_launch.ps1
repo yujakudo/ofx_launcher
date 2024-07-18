@@ -125,7 +125,7 @@ function checkOnline {
 function checkMedia {
     $new_usbs = (Get-WmiObject CIM_LogicalDisk | Where-Object DriveType -eq 2).DeviceID
     if($null -eq $new_usbs) {
-        $new_usbs = $()
+        $new_usbs = @()
         $new_str_usbs = ""
     } else {
         $new_str_usbs = $new_usbs -join ","
@@ -204,7 +204,7 @@ function callInstaller($str_arg) {
 # $FONT_FAMILY = "游ゴシック Medium"
 # $FONT_FAMILY = "MSPゴシック"
 $FONT_FAMILY = "メイリオ"
-$FONT_SIZE = 11
+$FONT_SIZE = 10
 
 <#  フォームのための定数    #>
 $MARGIN_W = 20;   $PAD_COL = 16;   $COL_W = 120;
@@ -294,23 +294,23 @@ function makeDialog {
     #   フォーム上のパーツ
     # ラベル
     newLabel $dlg "lblOnline" `
-        (getX 0) (getY 2) (getWidth 1) (getHeight 0.5) "◎ Net folder"
+        (getX 0) (getY 2) (getWidth 1) (getHeight 0.5) "○ Net folder"
     switchLabel $dlg.lblOnline $false
     newLabel $dlg "lblUSB" `
-        (getX 1) (getY 2) (getWidth 1) (getHeight 0.5) "◎ USB drive"
+        (getX 1) (getY 2) (getWidth 1) (getHeight 0.5) "○ USB drive"
     switchLabel $dlg.lblUSB $false
     # 新規作成ボタン
     newButton $dlg "btnNew" `
-        (getX 0) (getY 0) (getWidth 1) (getHeight 1) "新規作成"
+        (getX 0) (getY 0) (getWidth 1) (getHeight 1) "発注書の`r`n新規作成"
     # ローカルフォルダボタン
     newButton $dlg "btnFolder" `
-        (getX 1) (getY 0) (getWidth 1) (getHeight 1) "ローカル`r`nフォルダ"
+        (getX 1) (getY 0) (getWidth 1) (getHeight 1) "ローカル`r`nフォルダを開く"
     # アップロードボタン
     newButton $dlg "btnUpload" `
-        (getX 0) (getY 1) (getWidth 1) (getHeight 1) "アップロード"
+        (getX 0) (getY 1) (getWidth 1) (getHeight 1) "共有フォルダに`r`nアップロード"
     # インストールボタン
     newButton $dlg "btnInstall" `
-        (getX 1) (getY 1) (getWidth 1) (getHeight 1) "インストール"
+        (getX 1) (getY 1) (getWidth 1) (getHeight 1) "USBにｲﾝｽﾄｰﾙ`r`n/ ｱﾝｲﾝｽﾄｰﾙ"
 
     # フォーム
     $w = (getX 2) - $PAD_COL + $MARGIN_W
@@ -326,9 +326,7 @@ function makeDialog {
     return $dlg
 }
 
-# フォームの部品
-# ブロックのスコープでも使えるように AllScopeにしておく
-# New-Variable -Name DIALOG -Value $null -Option AllScope
+Write-Host "Script starts."
 
 # この環境の辞書を作成
 $THIS_DICT = makePathDict $CONFIG.env.$THIS_ENV.dirs
@@ -346,15 +344,22 @@ $DIALOG = makeDialog
 # フォームが表示されたときの処理
 $DIALOG.form.Add_Shown({
     Write-Host "Initiarizing."
+    $DIALOG.form.text = "起動しています…"
     init
     $DIALOG.btnNew.Enabled = $true
     $DIALOG.btnFolder.Enabled = $true
     $DIALOG.timer.Enabled = $true
     $DIALOG.timer.Start()
+    $DIALOG.form.text = "発注書ランチャー"
     Write-Host "Start."
 })
 # フォームを閉じるときの処理
 $DIALOG.form.Add_Closing({
+    $DIALOG.form.text = "終了しています…"
+    $DIALOG.btnNew.Enabled = $false
+    $DIALOG.btnFolder.Enabled = $false
+    $DIALOG.btnUpload.Enabled = $false
+    $DIALOG.btnInstall.Enabled = $false
     $DIALOG.timer.Stop()
     $DIALOG.timer.Enabled = $false
     exitProc
@@ -382,9 +387,11 @@ $DIALOG.timer.Add_Tick({
     if(checkOnline) {
         Write-Host "network folder: ${STATUS.isOnline}"
     }
-    if(checkMedia) {
-        $drives = $STATUS.usbs -join ","
-        Write-Host  "removable media: ${drives}"
+    if($THIS_ENV -ne "USB") {
+        if(checkMedia) {
+            $drives = $STATUS.usbs -join ","
+            Write-Host  "removable media: ${drives}"
+        }
     }
 })
 # フォームを表示
@@ -393,3 +400,5 @@ $DIALOG.form.ShowDialog()
 # 終了
 Remove-Variable -Name DIALOG
 Remove-Variable -Name THIS_DICT
+
+Write-Host "Totaly finished."

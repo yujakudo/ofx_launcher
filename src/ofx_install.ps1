@@ -4,7 +4,7 @@
     2024.6.16   Initial writing.
 #>
 
-Set-StrictMode -Version 2.0
+Set-StrictMode -Version 1.0
 
 # ライブラリのインポート
 . "$($PSScriptRoot)\ofx_lib.ps1"
@@ -61,7 +61,7 @@ function copyFiles($src_dict, $dest_dict, $is_update=$false) {
             #   ファイルが既にあるときは、タイムスタンプを比較して本が新しければコピーする
             $src_date = [datetime](Get-ItemProperty $src).LastWriteTime
             $dest_date = [datetime](Get-ItemProperty $dest).LastWriteTime
-            $do = ( $src_date.CompareTo($dest_date) > 0)
+            $do = ( $src_date.CompareTo($dest_date) -gt 0)
         }
         if($do) {
             # ディレクトリがなければ作成する
@@ -84,13 +84,6 @@ function copyFiles($src_dict, $dest_dict, $is_update=$false) {
             Write-Host "${msg} ${dest}"
         }
     }
-    # DriveがC:なら、ショートカットを作成
-    if($dest_dict['Drive'] -eq "C:") {
-        $sc_inf = $CONFIG.install.shortcut
-        $target = $dest_files.($sc_inf.target)
-        $icon = $dest_files.($sc_inf.icon)
-        createShortCut $sc_inf.name $target $icon
-    }
     return $copied
 }
 
@@ -100,19 +93,17 @@ function getShortCutPath($name) {
 }
 
 <#  ショートカットの作成    #>
-function createShortCut($name, $target, $icon, $wd="") {
-    $fn = getShortCutPath $name
+function createShortCut($env, $dect) {
+    $sc_inf = $CONFIG.env.$env.shortcut.psobject.copy()
+    $sc_inf = convertVars $sc_inf $dect $true
+
     $WsShell = New-Object -ComObject WScript.Shell
-    $Shortcut = $WsShell.CreateShortcut($fn)
-    $Shortcut.TargetPath = $target
-    $Shortcut.IconLocation = $icon
-    if($wd -eq "") {
-        $wd = Split-Path -Parent $target
-    }
-    $Shortcut.WorkingDirectory = $wd
+    $Shortcut = $WsShell.CreateShortcut("${sc_inf.dir}\${sc_inf.name}.lnk")
+    $Shortcut.TargetPath = $sc_inf.target
+    $Shortcut.IconLocation = $sc_inf.icon
+    $Shortcut.WorkingDirectory = $sc_inf."working-dir"
     $Shortcut.Save()
 }
-
 <#  インストール／アップデート 
 #>
 function install($drv_info, $SRC_ENV) {
@@ -136,6 +127,8 @@ function install($drv_info, $SRC_ENV) {
         makeDirs $dest_dict
         Write-Host "ファイルをコピーしています…"
         $copied = copyFiles $src_dict $dest_dict $false
+        Write-Host "ショートカットを作成しています…"
+        createShortCut $drv_info["env"] $dest_dict
         Write-Host "${letter}ドライブへのインストールが完了しました"
     }
 }
@@ -210,12 +203,13 @@ function HashDsp($hash) {
     foreach($key in $hash.Keys) {
         $lst += $hash[$key]
     }
+    Write-Host
     ($lst | ForEach-Object { New-Object PSCustomObject -Property $_ } `
          | Out-String).trim() | Write-Host
 }
 
 <#  アップデートの処理  #>
-updateProc($arg) {
+function updateProc($arg) {
     Write-Host "ドライブを検出しています…"
     $sec_env = getSourceEnv
     $drives = getDrives $arg["media-only"]
@@ -257,34 +251,43 @@ function installProc($arg) {
     }
 }
 
-# 引数のデフォルト。無指定の場合はアップデートのみ
-$arg = @{
-    "update" = $true
-    "istall" = $false
-    "media-only" = $false
-}
-# もし引数があったら、アップデートもしない
-if($Args.length -gt 0) {
-    $arg["update"] = $false
+<#  引数の取得  #>
+function getArguments {
+    # 引数のデフォルト。無指定の場合はアップデートのみ
+    $arg = @{
+        "update" = $true
+        "install" = $false
+        "media-only" = $false
+    }
+    # もし引数があったら、アップデートもしない
+    if($Script:Args.length -gt 0) {
+        $arg["update"] = $false
+    }
+
+    # オプションの解析
+    for($i=0; $i -lt $Script:Args.length; $i++) {
+        $opt = $Script:Args[$i].Replace("-","")
+        switch($opt) {
+            "full" {   $arg["update"] = $true; $arg["install"] = $true;    }
+            "update" {   $arg["update"] = $true;     }
+            "install" {   $arg["install"] = $true;     }
+            "mediaonly" {   $arg["media-only"] = $true;     }
+            Default { Write-Host "不正なオプション ${opt} が指定されました。" }
+        }
+    }
+    return $arg
 }
 
-# オプションの解析
-for($i=0; $i -lt $Args.length; $i++) {
-    $opt = $Arg[$i].Replace("-","")
-    switch($opt) {
-        "full" {   $arg["update"] = $true; $arg["istall"] = $true;    }
-        "update" {   $arg["update"] = $true;     }
-        "install" {   $arg["install"] = $true;     }
-        "mediaonly" {   $arg["media-only"] = $true;     }
-    }
-}
+$arg = getArguments
 
 # アップデート
 if($arg["update"]) {
+    Write-Host "アップデート処理を呼び出します"
     updateProc $arg
 }
 
 # インストール/アンインストール
 if($arg["install"]) {
+    Write-Host "インストール処理を呼び出します"
     installProc $arg
 }
