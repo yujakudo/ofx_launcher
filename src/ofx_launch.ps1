@@ -12,7 +12,7 @@ Add-Type -AssemblyName System.Drawing
 
 # PowerShellのパス
 $POWER_SHELL = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
-
+$MAIN_WINDOW_TITLE = "発注書ランチャ"
 # ライブラリのインポート
 # 設定ファイルも読み込まれ、グローバル変数に設定される
 . "$($PSScriptRoot)\ofx_lib.ps1"
@@ -33,6 +33,9 @@ function Get-ConsoleWindowHandle {
         } else {
             break
         }
+    }
+    if(0 -eq $p.MainWindowHandle) {
+        $p = (Get-Process | ?{$_.MainWindowTitle -match $MAIN_WINDOW_TITLE})[0] 
     }
     return $p.MainWindowHandle
 }
@@ -156,7 +159,7 @@ function checkMedia {
 <#  ファイルの移動  #>
 function moveFiles($drv_inf, $net_dirs) {
     $src_dirs = makeDirList $drv_inf["env"] $drv_inf["letter"]
-    for($i=0; $i -le $src_dirs.length; $i++) {
+    for($i=0; $i -lt $src_dirs.length; $i++) {
         $src = $src_dirs[$i]
         $dest = $net_dirs[$i]
         Write-Host "#${i} moving files in ${src}"

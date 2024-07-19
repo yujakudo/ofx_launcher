@@ -68,17 +68,18 @@ function copyFiles($src_dict, $dest_dict, $is_update=$false) {
             $dir = Split-Path -Parent $dest
             if(-not (Test-Path -LiteralPath $dir)) {
                 New-Item $dir -ItemType Directory -ErrorAction SilentlyContinue | Out-Null
+                Write-Host "Making a directory ... ${dir}"
             }
             if(Test-Path -LiteralPath $src) {
                 Copy-Item $src $dest -Force | Out-Null
                 Unblock-File $dest
                 $copied += 1
-                $msg = "Copied..."
+                $msg = "Copying from " + $src + "`r`n to "
             } else {
-                Write-Host "Not found... ${src}"
+                Write-Host "Not found. ${src}"
             }
         } else {
-            $msg = "Latest..."
+            $msg = "Latest. "
         }
         if($msg -ne "") {
             Write-Host "${msg} ${dest}"
@@ -94,14 +95,20 @@ function getShortCutPath($name) {
 
 <#  ショートカットの作成    #>
 function createShortCut($env, $dect) {
-    $sc_inf = $CONFIG.env.$env.shortcut.psobject.copy()
-    $sc_inf = convertVars $sc_inf $dect $true
+    $sc_inf = $CONFIG.env.$env.shortcut
+    $dir = expandPath $sc_inf.dir $dect $true
+    $path = $dir + '\' + $sc_inf.name + '.lnk'
+    $target = $CONFIG.install.files.($sc_inf.target)
+    $target = expandPath $target $dect $true
+    $icon = $CONFIG.install.files.($sc_inf.icon)
+    $icon = expandPath $icon $dect $true
+    $wd = expandPath $sc_inf."working-dir" $dect $true
 
     $WsShell = New-Object -ComObject WScript.Shell
-    $Shortcut = $WsShell.CreateShortcut("${sc_inf.dir}\${sc_inf.name}.lnk")
-    $Shortcut.TargetPath = $sc_inf.target
-    $Shortcut.IconLocation = $sc_inf.icon
-    $Shortcut.WorkingDirectory = $sc_inf."working-dir"
+    $Shortcut = $WsShell.CreateShortcut($path)
+    $Shortcut.TargetPath = $target
+    $Shortcut.IconLocation = $icon
+    $Shortcut.WorkingDirectory = $wd
     $Shortcut.Save()
 }
 <#  インストール／アップデート 
@@ -127,8 +134,10 @@ function install($drv_info, $SRC_ENV) {
         makeDirs $dest_dict
         Write-Host "ファイルをコピーしています…"
         $copied = copyFiles $src_dict $dest_dict $false
-        Write-Host "ショートカットを作成しています…"
-        createShortCut $drv_info["env"] $dest_dict
+        if($drv_info["env"] -ne "USB") {
+            Write-Host "ショートカットを作成しています…"
+            createShortCut $drv_info["env"] $dest_dict
+        }
         Write-Host "${letter}ドライブへのインストールが完了しました"
     }
 }
