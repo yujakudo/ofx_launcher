@@ -156,6 +156,19 @@ function checkMedia {
     return $true
 }
 
+
+<#  ファイルがあるかチェック    #>
+function FileExistsInDrive($drv_inf, $net_dirs) {
+    $dirs = makeDirList $drv_inf["env"] $drv_inf["letter"]
+    foreach($dir in $dirs) {
+        $files = Get-ChildItem -Parent $dir -Name
+        if($null -ne $files) {
+            return $true
+        }
+    }
+    return $false
+}
+
 <#  ファイルの移動  #>
 function moveFiles($drv_inf, $net_dirs) {
     $src_dirs = makeDirList $drv_inf["env"] $drv_inf["letter"]
