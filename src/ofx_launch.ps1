@@ -126,15 +126,16 @@ function checkOnline {
 }
 
 <#  リムーバブルメディアのチェック    #>
-function checkMedia {
+function checkMedia( $first_time = $false ) {
     $changed = $false
     $STATUS.usb_exists = $true
     $new_drives = @("C:")
     $usbs = (Get-WmiObject CIM_LogicalDisk | Where-Object DriveType -eq 2).DeviceID
     if($null -eq $usbs) {
         $STATUS.usb_exists = $false
+    } else {
+        $new_drives += $usbs
     }
-    $new_drives += $usbs
     # 既存のメディア情報の更新
     foreach($key in $STATUS.drives.Keys) {
         if($new_drives.Contains($key)) {
@@ -156,20 +157,21 @@ function checkMedia {
         }
     }
     # 新規メディアがあれば、アップデートする
-    if($is_new) {
+    if($is_new -and (-not $first_time)) {
         callInstaller "--update --mediaonly"
         $changed = $true
     }
     # 表示の切り替え
     $STATUS.file_exists = $false
-    $keys = $STATUS.drives.Keys | Sort-Object
-    for($i=0; $i -lt $keys.length; $i++) {
+    $keys = @()
+    $keys += $STATUS.drives.Keys | Sort-Object
+    for($i=0; $i -lt $keys.length -and $i -lt 3; $i++) {
         $res = switchDriveLabel $i $STATUS.drives[$keys[$i]]
         if($res -eq 2) {
             $STATUS.file_exists = $true
         }
     }
-    for(; $i -lt 4; $i++) {
+    for(; $i -lt 3; $i++) {
         switchDriveLabel $i $null
     }
     return $changed
@@ -181,11 +183,11 @@ function newDriveInfo($drv_letter) {
     $file_exists = @()
     if($drv_inf["exists"]) {
         foreach($dir in $dirs) {
-            $files = Get-ChildItem -Parent $dir -Name
+            $files = Get-ChildItem -Path $dir -Name
             if($null -eq $files) {
-                $file_exists += $true
-            } else {
                 $file_exists += $false
+            } else {
+                $file_exists += $true
             }
         }
     }
@@ -315,17 +317,17 @@ function switchDriveLabel($idx, $drv_inf=$null) {
     $res = 0
     if($null -ne $drv_inf) {
         $txt = $drv_inf["letter"] + " "
-        if($drv_inf["exists"]) {
+        if(-not $drv_inf["exists"]) {
             $txt += "‐"
         } else {
             $res = 1
             $txt += "●"
-            $col = "#00FF00"
+            $col = "#000080"
             foreach($exists in $drv_inf["file_exists"]) {
                 if($exists) {
                     $res = 2
                     $txt += "■"
-                    $col = "#FF0000"
+                    $col = "#800000"
                 } else {
                     $txt += "□"
                 }
@@ -388,6 +390,24 @@ function makeDialog {
     return $dlg
 }
 
+<#  タイマーによる処理  #>
+function timerProc($first_time = $false) {
+    if(checkOnline) {
+        if($STATUS.is_online) {
+            Write-Host "network folder connected."
+        } else {
+            Write-Host "network folder disconnected."
+        }
+    }
+    if(checkMedia $first_time) {
+        $drives = $STATUS.drives.Keys -join ","
+        Write-Host  "media changed: ${drives}"
+    }
+    # 表示とボタンの切り替え
+    $DIALOG.btnInstall.Enabled = ($STATUS.usb_exists -and ($THIS_ENV -ne "USB"))
+    $DIALOG.btnUpload.Enabled = ($STATUS.is_online -and $STATUS.file_exists)
+}
+
 Write-Host "Script starts."
 
 # この環境の辞書を作成
@@ -412,6 +432,8 @@ $DIALOG.form.Add_Shown({
     $DIALOG.btnNew.Enabled = $true
     $DIALOG.btnFolder.Enabled = $true
     $DIALOG.timer.Enabled = $true
+    # タイマー処理の最初の一回（アップデートなし）
+    timerProc $true
     $DIALOG.timer.Start()
     $DIALOG.form.text = "発注書ランチャー"
     Write-Host "Start."
@@ -447,17 +469,9 @@ $DIALOG.btnInstall.Add_Click({
 })
 # タイマー処理
 $DIALOG.timer.Add_Tick({
-    if(checkOnline) {
-        Write-Host "network folder: ${STATUS.is_online}"
-    }
-    if(checkMedia) {
-        $drives = $STATUS.drives.Keys -join ","
-        Write-Host  "removable media: ${drives}"
-    }
-    # 表示とボタンの切り替え
-    $DIALOG.btnInstall.Enabled = ($STATUS.usb_exists -and ($THIS_ENV -ne "USB"))
-    $DIALOG.btnUpload.Enabled = ($STATUS.is_online -and $STATUS.file_exists)
+    timerProc
 })
+
 # フォームを表示
 Hide-ConsoleWindow
 $DIALOG.form.ShowDialog()
