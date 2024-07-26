@@ -35,7 +35,11 @@ function Get-ConsoleWindowHandle {
         }
     }
     if(0 -eq $p.MainWindowHandle) {
-        $p = (Get-Process | ?{$_.MainWindowTitle -match $MAIN_WINDOW_TITLE})[0] 
+        $procs = (Get-Process | Where-Object {$_.MainWindowTitle -match $MAIN_WINDOW_TITLE})
+        if($null -eq $procs) {
+            return $null
+        }
+        $p = $procs[0]
     }
     return $p.MainWindowHandle
 }
@@ -111,63 +115,84 @@ function exitProc {
 
 <#  オンラインのチェック    #>
 function checkOnline {
-    $new_status = IsOnline
+    $new_status = isOnline
     # オンラインの状態が変わらなければ終了
-    if($new_status -eq $STATUS.isOnline) {
+    if($new_status -eq $STATUS.is_online) {
         return $false
     }
-    # 表示とボタンの切り替え
-    switchLabel $DIALOG.lblOnline $new_status
-    $DIALOG.btnUpload.Enabled = $new_status
     # 状態の更新
-    $STATUS.isOnline = $new_status
+    $STATUS.is_online = $new_status
     return $true
 }
 
 <#  リムーバブルメディアのチェック    #>
 function checkMedia {
-    $new_usbs = (Get-WmiObject CIM_LogicalDisk | Where-Object DriveType -eq 2).DeviceID
-    if($null -eq $new_usbs) {
-        $new_usbs = @()
-        $new_str_usbs = ""
-    } else {
-        $new_str_usbs = $new_usbs -join ","
+    $changed = $false
+    $STATUS.usb_exists = $true
+    $new_drives = @("C:")
+    $usbs = (Get-WmiObject CIM_LogicalDisk | Where-Object DriveType -eq 2).DeviceID
+    if($null -eq $usbs) {
+        $STATUS.usb_exists = $false
     }
-    # メディアの状態が変わらなければ終了
-    if($new_str_usbs -eq $STATUS.str_usbs) {
-        return $false
+    $new_drives += $usbs
+    # 既存のメディア情報の更新
+    foreach($key in $STATUS.drives.Keys) {
+        if($new_drives.Contains($key)) {
+            # なくなっていたら削除
+            $STATUS.drives.Remove($key)
+            $changed = $true
+        } else {
+            # 更新
+            $STATUS.drives[$key] = newDriveInfo $key
+        }
     }
-    # 表示とボタンの切り替え
-    $exists = ($new_usbs.length -gt 0)
-    switchLabel $DIALOG.lblUSB $exists
-    $DIALOG.btnInstall.Enabled = $exists
-    # 新規のドライブがあったらアップデート
-    if($exists) {
-        foreach($drv in $new_usbs) {
-            if( -not $STATUS.usbs.Contains($drv)) {
-                callInstaller "--update --mediaonly"
-                break
+    # 新規メディアの情報を取得
+    $is_new = $false
+    foreach($key in $new_drives) {
+        if(-not $STATUS.drives.ContainsKey($key)) {
+            $drv_inf = newDriveInfo $key
+            $STATUS.drives.Add($key, $drv_inf)
+            $is_new = $true
+        }
+    }
+    # 新規メディアがあれば、アップデートする
+    if($is_new) {
+        callInstaller "--update --mediaonly"
+        $changed = $true
+    }
+    # 表示の切り替え
+    $STATUS.file_exists = $false
+    $keys = $STATUS.drives.Keys | Sort-Object
+    for($i=0; $i -lt $keys.length; $i++) {
+        $res = switchDriveLabel $i $STATUS.drives[$keys[$i]]
+        if($res -eq 2) {
+            $STATUS.file_exists = $true
+        }
+    }
+    for(; $i -lt 4; $i++) {
+        switchDriveLabel $i $null
+    }
+    return $changed
+}
+
+function newDriveInfo($drv_letter) {
+    $drv_inf = getDriveInfo $drv_letter
+    $dirs = makeDirList $drv_inf["env"] $drv_letter
+    $file_exists = @()
+    if($drv_inf["exists"]) {
+        foreach($dir in $dirs) {
+            $files = Get-ChildItem -Parent $dir -Name
+            if($null -eq $files) {
+                $file_exists += $true
+            } else {
+                $file_exists += $false
             }
         }
     }
-    # 状態の更新
-    $STATUS.usbs = $new_usbs
-    $STATUS.str_usbs = $new_str_usbs
-    return $true
+    $drv_inf.Add("file_exists", $file_exists)
+    return $drv_inf
 }
 
-
-<#  ファイルがあるかチェック    #>
-function FileExistsInDrive($drv_inf, $net_dirs) {
-    $dirs = makeDirList $drv_inf["env"] $drv_inf["letter"]
-    foreach($dir in $dirs) {
-        $files = Get-ChildItem -Parent $dir -Name
-        if($null -ne $files) {
-            return $true
-        }
-    }
-    return $false
-}
 
 <#  ファイルの移動  #>
 function moveFiles($drv_inf, $net_dirs) {
@@ -283,15 +308,33 @@ function newLabel($dlg, $name, $x, $y, $width, $height, $text) {
 }
 
 <#  ラベルのON/OFF  #>
-function switchLabel($lbl, $value) {
-    if($value) {
-        $lbl.Text = $lbl.Text.Replace("○", "●")
-        $lbl.forecolor = "#FF8080"
-    } else {
-        $lbl.Text = $lbl.Text.Replace("●", "○")
-        $lbl.forecolor = "#808080"
+function switchDriveLabel($idx, $drv_inf=$null) {
+    $name = "lblDrive" + ([string]$idx).Trim()
+    $col = "#080808"
+    $txt = ""
+    $res = 0
+    if($null -ne $drv_inf) {
+        $txt = $drv_inf["letter"] + " "
+        if($drv_inf["exists"]) {
+            $txt += "‐"
+        } else {
+            $res = 1
+            $txt += "●"
+            $col = "#00FF00"
+            foreach($exists in $drv_inf["file_exists"]) {
+                if($exists) {
+                    $res = 2
+                    $txt += "■"
+                    $col = "#FF0000"
+                } else {
+                    $txt += "□"
+                }
+            }
+        }
     }
-
+    $DIALOG.$name.foreColor = $col
+    $DIALOG.$name.Text = $txt
+    return $res
 }
 
 <#  タイマーの作成  #>
@@ -309,28 +352,31 @@ function makeDialog {
 
     #   フォーム上のパーツ
     # ラベル
-    newLabel $dlg "lblOnline" `
-        (getX 0) (getY 2) (getWidth 1) (getHeight 0.5) "○ Net folder"
-    switchLabel $dlg.lblOnline $false
-    newLabel $dlg "lblUSB" `
-        (getX 1) (getY 2) (getWidth 1) (getHeight 0.5) "○ USB drive"
-    switchLabel $dlg.lblUSB $false
+    newLabel $dlg "lblDrive0" `
+        (getX 0) (getY 2) (getWidth 1) (getHeight 0.5) ""
+    newLabel $dlg "lblDrive1" `
+        (getX 0) (getY 2.5) (getWidth 1) (getHeight 0.5) ""
+    newLabel $dlg "lblDrive2" `
+        (getX 0) (getY 3) (getWidth 1) (getHeight 0.5) ""
     # 新規作成ボタン
     newButton $dlg "btnNew" `
         (getX 0) (getY 0) (getWidth 1) (getHeight 1) "発注書の`r`n新規作成"
-    # ローカルフォルダボタン
-    newButton $dlg "btnFolder" `
-        (getX 1) (getY 0) (getWidth 1) (getHeight 1) "ローカル`r`nフォルダを開く"
     # アップロードボタン
     newButton $dlg "btnUpload" `
-        (getX 0) (getY 1) (getWidth 1) (getHeight 1) "共有フォルダに`r`nアップロード"
+        (getX 1) (getY 0) (getWidth 1) (getHeight 1) "共有フォルダに`r`nアップロード"
+    # ローカルフォルダボタン
+    newButton $dlg "btnFolder" `
+        (getX 0) (getY 1) (getWidth 1) (getHeight 1) "ローカル`r`nフォルダを開く"
+    # 共有フォルダボタン
+    newButton $dlg "btnShareFolder" `
+        (getX 1) (getY 1) (getWidth 1) (getHeight 1) "共有フォルダを`r`n開く"
     # インストールボタン
     newButton $dlg "btnInstall" `
-        (getX 1) (getY 1) (getWidth 1) (getHeight 1) "USBにｲﾝｽﾄｰﾙ`r`n/ ｱﾝｲﾝｽﾄｰﾙ"
+        (getX 1) (getY 2) (getWidth 1) (getHeight 1) "USBにｲﾝｽﾄｰﾙ`r`n/ ｱﾝｲﾝｽﾄｰﾙ"
 
     # フォーム
     $w = (getX 2) - $PAD_COL + $MARGIN_W
-    $h = (getY 2) + (getHeight 0.5) + $MARGIN_H
+    $h = (getY 3) + (getHeight 0.5) + $MARGIN_H
     $scr = [System.Windows.Forms.SystemInformation]::WorkingArea.Size
     $x = $scr.Width - $w
     $y = 0
@@ -348,9 +394,10 @@ Write-Host "Script starts."
 $THIS_DICT = makePathDict $CONFIG.env.$THIS_ENV.dirs
 # 状態管理
 $STATUS = [PSCustomObject]@{
-    isOnline = $false
-    usbs = @()
-    str_usbs = ""
+    is_online = $false
+    drives = @{}
+    usb_exists = $false
+    file_exists = $false
 }
 # フォームを作成
 $DIALOG = makeDialog
@@ -401,14 +448,15 @@ $DIALOG.btnInstall.Add_Click({
 # タイマー処理
 $DIALOG.timer.Add_Tick({
     if(checkOnline) {
-        Write-Host "network folder: ${STATUS.isOnline}"
+        Write-Host "network folder: ${STATUS.is_online}"
     }
-    if($THIS_ENV -ne "USB") {
-        if(checkMedia) {
-            $drives = $STATUS.usbs -join ","
-            Write-Host  "removable media: ${drives}"
-        }
+    if(checkMedia) {
+        $drives = $STATUS.drives.Keys -join ","
+        Write-Host  "removable media: ${drives}"
     }
+    # 表示とボタンの切り替え
+    $DIALOG.btnInstall.Enabled = ($STATUS.usb_exists -and ($THIS_ENV -ne "USB"))
+    $DIALOG.btnUpload.Enabled = ($STATUS.is_online -and $STATUS.file_exists)
 })
 # フォームを表示
 Hide-ConsoleWindow

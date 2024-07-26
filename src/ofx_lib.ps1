@@ -5,7 +5,7 @@
 #>
 
 # 最低限必要なファイルのキー
-$REQUIRED_FILES = @("install-ps1", "lib-ps1")
+$REQUIRED_FILES = @("launch-bat", "launch-ps1", "lib-ps1")
 #   Excelへ設定パスを渡す環境変数
 $ENVVAR_NAME = "OFX_BOOK_CONFIG"
 #   各ファイルへのパス

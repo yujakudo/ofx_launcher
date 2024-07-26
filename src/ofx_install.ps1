@@ -9,6 +9,8 @@ Set-StrictMode -Version 1.0
 # ライブラリのインポート
 . "$($PSScriptRoot)\ofx_lib.ps1"
 
+# インストーラーのファイルのキー
+$INSTALLER_FILES = @("install-ps1", "lib-ps1")
 
 <#  ディレクトリの作成
     CONFIGの　install > dirs にあるディレクトリを作成する
@@ -47,8 +49,8 @@ function copyFiles($src_dict, $dest_dict, $is_update=$false) {
     $dest_files = convertVars $dest_files $dest_dict $true
     #   ループ
     foreach($key in $src_files.psobject.properties.name) {
-        # アップデートのとき、キー値が必須ファイルならコピーしない
-        if($is_update -and $REQUIRED_FILES.Contains($key) ) {
+        # アップデートのとき、キー値がインストーラーのファイルならコピーしない
+        if($is_update -and $INSTALLER_FILES.Contains($key) ) {
             continue
         }
         $msg = ""
