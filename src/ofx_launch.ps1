@@ -137,14 +137,15 @@ function checkMedia( $first_time = $false ) {
         $new_drives += $usbs
     }
     # 既存のメディア情報の更新
-    foreach($key in $STATUS.drives.Keys) {
+    $keys = $STATUS.drives.Keys.clone()
+    foreach($key in $keys) {
         if($new_drives.Contains($key)) {
+            # 更新
+            $STATUS.drives[$key] = newDriveInfo $key
+        } else {
             # なくなっていたら削除
             $STATUS.drives.Remove($key)
             $changed = $true
-        } else {
-            # 更新
-            $STATUS.drives[$key] = newDriveInfo $key
         }
     }
     # 新規メディアの情報を取得
@@ -158,13 +159,13 @@ function checkMedia( $first_time = $false ) {
     }
     # 新規メディアがあれば、アップデートする
     if($is_new -and (-not $first_time)) {
-        callInstaller "--update --mediaonly"
+        callInstaller "--update --mediaonly" | Out-Null
         $changed = $true
     }
     # 表示の切り替え
     $STATUS.file_exists = $false
     $keys = @()
-    $keys += $STATUS.drives.Keys | Sort-Object
+    $keys += ($STATUS.drives.Keys | Sort-Object)
     for($i=0; $i -lt $keys.length -and $i -lt 3; $i++) {
         $res = switchDriveLabel $i $STATUS.drives[$keys[$i]]
         if($res -eq 2) {
@@ -174,6 +175,7 @@ function checkMedia( $first_time = $false ) {
     for(; $i -lt 3; $i++) {
         switchDriveLabel $i $null
     }
+    # 戻り値が配列になる…
     return $changed
 }
 
@@ -399,7 +401,8 @@ function timerProc($first_time = $false) {
             Write-Host "network folder disconnected."
         }
     }
-    if(checkMedia $first_time) {
+    $changed = checkMedia $first_time 
+    if($changed) {
         $drives = $STATUS.drives.Keys -join ","
         Write-Host  "media changed: ${drives}"
     }
